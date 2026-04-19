@@ -1,4 +1,5 @@
 const { REST, Routes, SlashCommandBuilder } = require('discord.js');
+require('dotenv').config();
 
 const commands = [
   new SlashCommandBuilder()
@@ -16,22 +17,22 @@ const commands = [
 
   new SlashCommandBuilder()
     .setName('loop')
-    .setDescription('Toggle loop')
-];
+    .setDescription('Toggle loop mode')
+].map(command => command.toJSON());
 
 const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 
 (async () => {
   try {
-    console.log('Registering slash commands...');
+    console.log('🔄 Registering slash commands...');
 
     await rest.put(
       Routes.applicationCommands(process.env.CLIENT_ID),
       { body: commands }
     );
 
-    console.log('Commands registered successfully!');
+    console.log('✅ Slash commands registered successfully!');
   } catch (error) {
-    console.error(error);
+    console.error('❌ Error:', error);
   }
 })();
