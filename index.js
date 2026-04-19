@@ -11,8 +11,6 @@ const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates]
 });
 
-let queue = [];
-
 client.once('ready', () => {
   console.log(`Logged in as ${client.user.tag}`);
 });
@@ -25,8 +23,6 @@ client.on('interactionCreate', async interaction => {
     const vc = interaction.member.voice.channel;
 
     if (!vc) return interaction.reply("Join VC first!");
-
-    queue.push(url);
 
     const connection = joinVoiceChannel({
       channelId: vc.id,
