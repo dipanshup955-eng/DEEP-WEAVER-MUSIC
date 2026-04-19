@@ -1,22 +1,48 @@
-const { Client, GatewayIntentBits, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus } = require('@discordjs/voice');
+const {
+  Client,
+  GatewayIntentBits,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle
+} = require('discord.js');
+
+const {
+  joinVoiceChannel,
+  createAudioPlayer,
+  createAudioResource,
+  AudioPlayerStatus
+} = require('@discordjs/voice');
+
 const play = require('play-dl');
 const express = require('express');
 
+// ===== KEEP ALIVE SERVER =====
 const app = express();
 app.get('/', (req, res) => res.send("Bot is alive"));
 app.listen(3000);
 
+// ===== DISCORD CLIENT =====
 const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates]
 });
 
+// ===== QUEUE SYSTEM =====
 const queue = new Map();
 
+// ===== READY EVENT =====
 client.once('ready', async () => {
   console.log(`Logged in as ${client.user.tag}`);
+
+  // 🎧 Spotify connection
+  await play.setToken({
+    spotify: {
+      client_id: process.env.SPOTIFY_CLIENT_ID,
+      client_secret: process.env.SPOTIFY_CLIENT_SECRET
+    }
+  });
 });
 
+// ===== INTERACTIONS =====
 client.on('interactionCreate', async interaction => {
   if (!interaction.isChatInputCommand() && !interaction.isButton()) return;
 
@@ -40,7 +66,7 @@ client.on('interactionCreate', async interaction => {
       queue.set(guildId, serverQueue);
     }
 
-    // Detect Spotify
+    // 🎧 Spotify detection
     if (play.sp_validate(query) === 'spotify') {
       const info = await play.spotify(query);
       const tracks = await info.all_tracks();
@@ -49,7 +75,7 @@ client.on('interactionCreate', async interaction => {
         serverQueue.songs.push(`${t.name} ${t.artists[0].name}`);
       }
 
-      await interaction.reply("Spotify playlist added 🎶");
+      await interaction.reply(`Added ${tracks.length} Spotify tracks 🎶`);
     } else {
       serverQueue.songs.push(query);
       await interaction.reply("Added to queue 🎵");
@@ -62,7 +88,7 @@ client.on('interactionCreate', async interaction => {
         adapterCreator: interaction.guild.voiceAdapterCreator
       });
 
-      playSong(guildId);
+      playSong(guildId, interaction.channel);
     }
   }
 
@@ -102,8 +128,8 @@ client.on('interactionCreate', async interaction => {
   }
 });
 
-// ================= PLAYER =================
-async function playSong(guildId) {
+// ===== PLAYER FUNCTION =====
+async function playSong(guildId, channel) {
   const serverQueue = queue.get(guildId);
   if (!serverQueue || !serverQueue.songs.length) return;
 
@@ -111,27 +137,47 @@ async function playSong(guildId) {
 
   try {
     const stream = await play.stream(song);
-    const resource = createAudioResource(stream.stream, { inputType: stream.type });
+    const resource = createAudioResource(stream.stream, {
+      inputType: stream.type
+    });
 
     serverQueue.player.play(resource);
     serverQueue.connection.subscribe(serverQueue.player);
 
+    // 🎛️ Control Buttons
     const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId('pause').setLabel('Pause').setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId('resume').setLabel('Resume').setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId('stop').setLabel('Stop').setStyle(ButtonStyle.Danger)
+      new ButtonBuilder()
+        .setCustomId('pause')
+        .setLabel('Pause')
+        .setStyle(ButtonStyle.Primary),
+
+      new ButtonBuilder()
+        .setCustomId('resume')
+        .setLabel('Resume')
+        .setStyle(ButtonStyle.Success),
+
+      new ButtonBuilder()
+        .setCustomId('stop')
+        .setLabel('Stop')
+        .setStyle(ButtonStyle.Danger)
     );
+
+    channel.send({
+      content: `🎶 Now Playing: ${song}`,
+      components: [row]
+    });
 
     serverQueue.player.once(AudioPlayerStatus.Idle, () => {
       if (!serverQueue.loop) serverQueue.songs.shift();
-      playSong(guildId);
+      playSong(guildId, channel);
     });
 
   } catch (err) {
-    console.log(err);
+    console.log("Error:", err);
     serverQueue.songs.shift();
-    playSong(guildId);
+    playSong(guildId, channel);
   }
 }
 
+// ===== LOGIN =====
 client.login(process.env.TOKEN);
